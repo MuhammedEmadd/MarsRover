@@ -113,5 +113,10 @@ def perception_step(Rover):
     Rover.vision_image[:,:,0] = color_thresh(image,(100, 100, 50))*200
     Rover.vision_image[:, :,1] = color_thresh(image,(200, 150, 0))*200
     Rover.vision_image[:,:, 2] = color_thresh(image)*200
+
+    # 5) Convert map image pixel values to rover-centric coords
+    roverx, rovery = rover_coords(threshed)
+    rocksx, rocksy = rover_coords(rocks)
+    obstaclesx, obstaclesy = rover_coords(obstacles)
    
     return Rover

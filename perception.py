@@ -86,7 +86,7 @@ def perception_step(Rover):
 
     # 1) Define source and destination points for perspective transform
     image = Rover.img
-    dst = 3
+    dst = 4
     bottom_offset = 5
     source = np.float32([[14, 140],
                          [300, 140],
@@ -113,10 +113,18 @@ def perception_step(Rover):
     Rover.vision_image[:,:,0] = color_thresh(image,(100, 100, 50))*200
     Rover.vision_image[:, :,1] = color_thresh(image,(200, 150, 0))*200
     Rover.vision_image[:,:, 2] = color_thresh(image)*200
-
     # 5) Convert map image pixel values to rover-centric coords
     roverx, rovery = rover_coords(threshed)
     rocksx, rocksy = rover_coords(rocks)
     obstaclesx, obstaclesy = rover_coords(obstacles)
-   
+    # 6) Convert rover-centric pixel values to world coordinates
+    scale = 8
+    wm = Rover.worldmap
+
+    rover_wx, rover_wy = pix_to_world(roverx, rovery, Rover.pos[0], Rover.pos[1], Rover.yaw, wm.shape[0], scale)
+    obs_wx, obs_wy = pix_to_world(obstaclesx, obstaclesy,Rover.pos[0],  Rover.pos[1], Rover.yaw, wm.shape[0], scale)
+    rock_wx, rock_wy = pix_to_world(rocksx, rocksy,Rover.pos[0], Rover.pos[1], Rover.yaw, wm.shape[0], scale)    
+ 
+    
+    
     return Rover

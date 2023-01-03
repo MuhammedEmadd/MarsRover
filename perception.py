@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import time
 
 # Identify pixels above the threshold
 # Threshold of RGB > 160 does a nice job of identifying ground pixels only
@@ -42,13 +43,12 @@ def to_polar_coords(x_pixel, y_pixel):
 def rotate_pix(xpix, ypix, yaw):
     # Convert yaw to radians
     yaw_rad = yaw * np.pi / 180
-    xpix_rotated = (xpix * np.cos(yaw_rad)) - (ypix * np.sin(yaw_rad))
-                            
+    xpix_rotated = (xpix * np.cos(yaw_rad)) - (ypix * np.sin(yaw_rad))                    
     ypix_rotated = (xpix * np.sin(yaw_rad)) + (ypix * np.cos(yaw_rad))
     # Return the result  
     return xpix_rotated, ypix_rotated
 
-def translate_pix(xpix_rot, ypix_rot, xpos, ypos, scale): 
+def translate_pix(xpix_rot, ypix_rot, xpos, ypos, scale):
     # Apply a scaling and a translation
     xpix_translated = (xpix_rot / scale) + xpos
     ypix_translated = (ypix_rot / scale) + ypos
@@ -70,11 +70,10 @@ def pix_to_world(xpix, ypix, xpos, ypos, yaw, world_size, scale):
     return x_pix_world, y_pix_world
 
 # Define a function to perform a perspective transform
-def perspect_transform(img, src, dst):
-           
+def perspect_transform(img, src, dst):     
     M = cv2.getPerspectiveTransform(src, dst)
-    warped = cv2.warpPerspective(img, M, (img.shape[1], img.shape[0]))# keep same size as input image
-    
+    # keep same size as input image
+    warped = cv2.warpPerspective(img, M, (img.shape[1], img.shape[0]))
     return warped
 
 
@@ -86,7 +85,7 @@ def perception_step(Rover):
 
     # 1) Define source and destination points for perspective transform
     image = Rover.img
-    dst = 3
+    dst = 4
     bottom_offset = 5
     source = np.float32([[14, 140],
                          [300, 140],
@@ -113,46 +112,47 @@ def perception_step(Rover):
     Rover.vision_image[:,:,0] = color_thresh(image,(100, 100, 50))*200
     Rover.vision_image[:, :,1] = color_thresh(image,(200, 150, 0))*200
     Rover.vision_image[:,:, 2] = color_thresh(image)*200
-
     # 5) Convert map image pixel values to rover-centric coords
     roverx, rovery = rover_coords(threshed)
     rocksx, rocksy = rover_coords(rocks)
     obstaclesx, obstaclesy = rover_coords(obstacles)
-    
-       # 6) Convert rover-centric pixel values to world coordinates
+    # 6) Convert rover-centric pixel values to world coordinates
     scale = 8
     wm = Rover.worldmap
 
     rover_wx, rover_wy = pix_to_world(roverx, rovery, Rover.pos[0], Rover.pos[1], Rover.yaw, wm.shape[0], scale)
     obs_wx, obs_wy = pix_to_world(obstaclesx, obstaclesy,Rover.pos[0],  Rover.pos[1], Rover.yaw, wm.shape[0], scale)
     rock_wx, rock_wy = pix_to_world(rocksx, rocksy,Rover.pos[0], Rover.pos[1], Rover.yaw, wm.shape[0], scale)
-
+    
     # 7) Update Rover worldmap (to be displayed on right side of screen)
         # Example: Rover.worldmap[obstacle_y_world, obstacle_x_world, 0] += 1
         #          Rover.worldmap[rock_y_world, rock_x_world, 1] += 1
         #          Rover.worldmap[navigable_y_world, navigable_x_world, 2] += 1
-    #coloring  obstacles and navigable terrain and rocks in the map 
-    #obstables are colored in red color (by increasing R value to 200)
-    #rocks are colored in RGB(255,255,200)which is white color (by assign B value to 200)
-    #any point rover can reach are asserted to not be red by make R value equals to 0
-    #terrian are colored in blue color (by increasing B value to 200)
-#so world map is updated in each perception steps after processing and detecting pixels of obstacles,rocks and terrian
     Rover.worldmap[obs_wy, obs_wx, 0] = 200
     Rover.worldmap[rover_wy, rover_wx, 0] = 0
     Rover.worldmap[rock_wy, rock_wx, 1] = 200
     Rover.worldmap[rover_wy, rover_wx, 2] = 200
-    
-
     # 8) Convert rover-centric pixel positions to polar coordinates
     # Update Rover pixel distances and angles
-    #update this attributes fron drive_rover.py to make rover move in navigable terrain with correct angles
-    #and avoid collisions with obstacles after detecting them from previous steps
-    #this is done by convert navigable terrain from cartesian to polar to help rover detect distance and angle to take 
-    # Rover.nav_dists = rover_centric_pixel_distances
-    # Rover.nav_angles = rover_centric_angles
-    
+        # Rover.nav_dists = rover_centric_pixel_distances
+        # Rover.nav_angles = rover_centric_angles
     dist, angles = to_polar_coords(roverx, rovery)
     Rover.nav_dists = dist
     Rover.nav_angles = angles
-   
+    
+    if len(obstaclesx) > 5:
+        # If a rock is identified, make the rover navigate to it
+        rock_distance, rock_angle = to_polar_coords(x_pixel=obstaclesx,
+                                                    y_pixel=obstaclesy)
+        Rover.rock_dist = rock_distance
+        Rover.rock_angle = rock_angle 
+        if not Rover.sample_seen:
+            # First frame sample has been seen, thus start the sample timer
+            Rover.sample_timer = time.time()
+        Rover.sample_seen = True
+
+    if Rover.start_pos is None:
+        Rover.start_pos = (Rover.pos[0], Rover.pos[1])
+        print('STARTING POSITION IS: ', Rover.start_pos)
+ 
     return Rover
